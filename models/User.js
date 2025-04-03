@@ -1,69 +1,67 @@
-import { supabase } from "../supaBaseCliente.js"; // Ajusta la ruta según tu estructura
-
-// Clase para manejar operaciones con la tabla users
+import { supabase } from "../supaBaseCliente.js";
 export class User {
-    // Buscar un usuario por email
-    static async findOne({ email }) {
-        const { data, error } = await supabase
-            .from("users")
-            .select("*")
-            .eq("email", email)
-            .single(); // Devuelve un solo registro
+  static async find(conditions = {}, columns = '*') {
+    let query = supabase.from('users').select(columns);
+    
+    // Aplica condiciones dinámicas
+    Object.entries(conditions).forEach(([key, value]) => {
+      query = query.eq(key, value);
+    });
+    
+    const { data, error } = await query.single();
+    if (error) throw error;
+    return data;
+  }
 
-        if (error) {
-            console.error("Error en findOne:", error);
-            throw error;
-        }
+  static async findById(id, columns = '*') {
+    return this.find({ id }, columns);
+  }
 
-        return data;
-    }
+  static async findOne(conditions, columns = '*') {
+    return this.find(conditions, columns);
+  }
 
-    // Buscar un usuario por ID
-    static async findById(id) {
-        const { data, error } = await supabase
-            .from("users")
-            .select("*")
-            .eq("id", id)
-            .single();
+  static async create(userData) {
+    const { data, error } = await supabase
+      .from('users')
+      .insert([userData])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
 
-        if (error) {
-            console.error("Error en findById:", error);
-            throw error;
-        }
+  static async update(id, updates, columns = '*') {
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', id)
+      .select(columns)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
 
-        return data;
-    }
+  static async delete(id) {
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    return true;
+  }
 
-    // Crear un nuevo usuario
-    static async create(userData) {
-        const { data, error } = await supabase
-            .from("users")
-            .insert([userData])
-            .select()
-            .single();
+  // models/User.js
+static async updatePassword(userId, newPasswordHash) {
+  const { error } = await supabase
+      .from('users')
+      .update({ password: newPasswordHash })
+      .eq('id', userId);
 
-        if (error) {
-            console.error("Error en create:", error);
-            throw error;
-        }
-
-        return data;
-    }
-
-    // Actualizar un usuario (opcional, si lo necesitas)
-    static async update(id, updates) {
-        const { data, error } = await supabase
-            .from("users")
-            .update(updates)
-            .eq("id", id)
-            .select()
-            .single();
-
-        if (error) {
-            console.error("Error en update:", error);
-            throw error;
-        }
-
-        return data;
-    }
+  if (error) throw error;
+  return true;
+}
 }
