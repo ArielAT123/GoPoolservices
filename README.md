@@ -1,7 +1,9 @@
 
 este codigo se debe ejecutar en el frond para que el access token se renueve
 
-´´´´
+   ```
+
+
     import { useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
@@ -32,5 +34,5 @@ useEffect(() => {
   return () => clearInterval(interval);
 }, []);
 
+   ```
 
-´´´´
