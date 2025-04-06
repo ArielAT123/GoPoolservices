@@ -4,22 +4,19 @@ import supabase from "../supaBaseCliente.js";
 
 async function getProfile(req, res) {
     const { user_id } = req.user;
-  
     try {
-      // Usamos el modelo User con selección de columnas
-      const user = await User.findById(user_id, 'id, email, firstname, lastname, avatar, username, created_at');
-      
-      if (!user) {
-        return res.status(400).send({ msg: "No se ha encontrado el usuario" });
-      }
-  
-      return res.status(200).send(user);
+        // Usamos el modelo User con selección de columnas
+        const user = await User.findById(user_id, 'id, email, firstname, lastname, avatar, username, created_at');
+        
+        if (!user) {
+            return res.status(400).send({ msg: "No se ha encontrado el usuario" });
+        }
+        return res.status(200).send(user);
     } catch (error) {
-      console.error("Error en getMe:", error);
-      return res.status(500).send({ msg: "Error del servidor", error });
+        console.error("Error en getMe:", error);
+        return res.status(500).send({ msg: "Error del servidor", error });
     }
-  }
-  
+}
 
 async function getUsers(req, res) {
     try {

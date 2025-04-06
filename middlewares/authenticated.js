@@ -8,7 +8,6 @@ function asureAuth(req, res, next) {
         }    
     const token = req.headers.authorization.replace("Bearer ", "");
     try {
-
         const hasExpired = jwtgenerated.hasExpiredToken(token);
         if(hasExpired){
             return res.status(400).send({msg: "Token ha expirado"});
@@ -21,7 +20,6 @@ function asureAuth(req, res, next) {
     } catch (error) {
         return res.status(400).send({msg: "Token invalido"});
     } 
- 
 }
 
 export const mdAuth = {
