@@ -17,7 +17,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         // Inicia el servidor después de la conexión exitosa
         server.listen(PORT, () => {
             console.log("##############################");
-            console.log("###### API REST ######");
+            console.log("########## API REST ##########");
             console.log("##############################");
             console.log(`http://${IP_SERVER}:${PORT}/api`);
 
