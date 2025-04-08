@@ -6,7 +6,7 @@ async function getProfile(req, res) {
     const { user_id } = req.user;
     try {
         // Usamos el modelo User con selección de columnas
-        const user = await User.findById(user_id, 'id, email, firstname, lastname, avatar, username, created_at');
+        const user = await auth.user.findById(user_id, 'id, email, firstname, lastname, avatar, username, created_at');
         
         if (!user) {
             return res.status(400).send({ msg: "No se ha encontrado el usuario" });
