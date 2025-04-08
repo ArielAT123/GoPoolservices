@@ -1,8 +1,15 @@
 import express from "express";
 import { AuthController } from "../controllers/index.js";
+import morgan from "morgan";
 
 
 const api = express.Router();
+
+
+// Middleware para registrar las peticiones HTTP
+// no vi esto en el codigo lo puse para ver si es necesario
+api.use(express.json());
+
 
 api.post("/auth/register", AuthController.register);
 api.post("/auth/login", AuthController.login);

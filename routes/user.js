@@ -5,9 +5,10 @@ import { mdAuth } from '../middlewares/authenticated.js';
 
 const api = express.Router();
 //const upload = multer({ storage: multer.memoryStorage() });
+api.use(express.json());
 
 // Rutas protegidas (requieren autenticación)
-api.get('/me', [mdAuth.asureAuth], UserController.getProfile);
+api.get("/me", [mdAuth.asureAuth], UserController.getProfile);
 api.put('/me', [mdAuth.asureAuth], UserController.updateProfile);
 api.delete('/me', [mdAuth.asureAuth], UserController.deleteAccount);
 api.put('/me/password', [mdAuth.asureAuth], UserController.changePassword);
