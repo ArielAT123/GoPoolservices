@@ -1,6 +1,5 @@
 import express from "express";
 import { AuthController } from "../controllers/index.js";
-import morgan from "morgan";
 
 
 const api = express.Router();

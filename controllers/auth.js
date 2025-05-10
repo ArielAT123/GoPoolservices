@@ -1,113 +1,175 @@
-import bcryptjs from "bcryptjs";
-import { User } from "../models/index.js";
-import { jwtgenerated } from "../utils/index.js";
-import  supabase  from "../supaBaseCliente.js";
+import { supabase, supabaseAdmin } from "../supaBaseCliente.js";
+import { User } from "../models/User.js";
 
+// Validar formato de email
+function isValidEmail(email) {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email);
+}
 
+// Validar contraseña (mínimo 6 caracteres, ejemplo mejorado)
+function isValidPassword(password) {
+  return password.length >= 6 && /[A-Za-z]/.test(password) && /[0-9]/.test(password);
+}
+
+function isUserExist(email) {
+  return User.existsByEmail(supabase, email); // Devuelve la Promise
+}
 
 async function register(req, res) {
-    try {
-        const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Todos los campos son obligatorios' });
-        }
-
-        // Validar formato de email
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({ error: 'Correo electrónico inválido' });
-        }
-
-        // Verificar si el usuario ya existe en Auth
-        const { data: existingUser, error: lookupError } = await supabase
-            .from('user')
-            .select('*')
-            .eq('email', email.toLowerCase())
-            .single();  // Asegura que solo esperamos un resultado
-        if (existingUser) {
-            return res.status(400).send({ msg: "El correo ya esta registrado en otra cuenta" });
-        }
-
-        // Registrar usuario en Supabase Auth
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        console.log('data', data);
-        if (error) {
-            return res.status(500).json({ error: 'Error al registrar el usuario', details: error.message });
-        }
-         // Crear nuevo usuario
-        const { data2 , error2 } = await supabase
-            .from('users')
-            .insert([
-                { 
-                    password: password,
-                    username: email.split('@')[0] // Opcional: crea username del email
-                }
-            ])
-            .select()  // Esto es crucial para devolver el registro insertado
-            .single();
-            console.log('data2', data2);
-            console.log('error2', error2);
-    
-        if (error2) {
-            throw new Error('Error al crear el usuario en la base de datos: ' + error2.message);
-        };
-
-
-        return res.status(201).json({ message: 'Usuario registrado exitosamente', userId: data.user.id });
-
-    } catch (error) {
-        console.error("Error en register:", error);
-        return res.status(500).json({ msg: "Error interno del servidor", error: error.message });
+    // Validar campos requeridos
+    if (!email || !password) {
+      return res.status(400).json({ 
+        error: { message: 'Email y contraseña son requeridos' } 
+      });
     }
+
+    // Validar formato de email
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ 
+        error: { message: 'Por favor ingresa un email válido' } 
+      });
+    }
+
+    // Validar contraseña
+    if (!isValidPassword(password)) {
+      return res.status(400).json({ 
+        error: { 
+          message: 'La contraseña debe tener al menos 6 caracteres, incluyendo letras y números' 
+        } 
+      });
+    }
+
+    // Verificar si el email existe en la tabla users (esperamos la Promise)
+    const userExists = await isUserExist(email);
+    console.log("ESTA registrado?", userExists); // Ahora mostrará true o false
+    if (userExists) {
+      return res.status(409).json({ 
+        error: { message: 'El email ya está registrado en la tabla users' } 
+      });
+    }
+
+    // Registrar usuario en Supabase Auth
+    const { data, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${process.env.FRONTEND_URL}/auth/confirm` // URL para confirmación de email
+      }
+    });
+
+    if (authError) {
+      // Manejar el caso de email ya registrado en auth.users
+      if (authError.message.includes('User already registered')) {
+        return res.status(409).json({ 
+          error: { message: 'El email ya está registrado en el sistema' } 
+        });
+      }
+      return res.status(400).json({ 
+        error: { 
+          message: 'Error al registrar usuario',
+          details: authError.message 
+        } 
+      });
+    }
+
+    // Sincronizar con la tabla users usando supabaseAdmin
+    if (data.user) {
+      await supabaseAdmin.from('users').insert({
+        id: data.user.id,
+        email: data.user.email,
+        nombre: '', // Valores por defecto (ajusta según tus necesidades)
+        username: '',
+        lastname: '',
+        nummatricula: '',
+        fechanacimiento: null,
+        fotommatricula: '',
+      }).select();
+    }
+
+    // Respuesta exitosa
+    return res.status(201).json({
+      user: data.user,
+      session: data.session ? {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        expires_at: data.session.expires_at
+      } : null,
+      email_confirmed: data.user?.email_confirmed_at !== null
+    });
+
+  } catch (error) {
+    console.error('Error en el registro:', error);
+    return res.status(500).json({ 
+      error: { 
+        message: 'Error interno del servidor',
+        details: process.env.NODE_ENV === 'development' ? error.message : null
+      } 
+    });
+  }
 }
 
 async function login(req, res) {
-    try {
+  try {
+    const { email, password } = req.body;
+    const { data, error } = await supabase.auth.signInWithPassword({ 
+      email, 
+      password 
+    });
 
-        const { email, password } = req.body;
-        // valida que el email y la contraseña 
-        const {error , data } = await supabase.auth.signInWithPassword({email, password});
-        console.log('data', data)
-        if (!error) {
-            return res.status(200).json({
-                access_token: data.session.access_token,
-                refresh_token: data.session.refresh_token,
-            });
-        } else {
-            return res.status(400).send({ msg: "Error al iniciar sesión credenciales incorrectas" });
-        }
-    } catch (error) {
-        console.error("Error en login:", error);
-        return res.status(500).send({ 
-            msg: "Error del servidor",
-            error: error.message 
-        });
+    if (error) {
+      console.log(data, error);
+      return res.status(400).json({ msg: "Error al iniciar sesión: credenciales incorrectas" });
     }
+
+    return res.status(200).json({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
+
+  } catch (error) {
+    console.error("Error en login:", error);
+    return res.status(500).json({
+      msg: "Error del servidor",
+      error: error.message
+    });
+  }
 }
 
 async function refreshAccessToken(req, res) {
-    try {
-        const { refreshToken } = req.body; 
-        if (!refreshToken) {
-        return res.status(400).send({ msg: "refreshToken es requerido" });
-        }
-        const { data, error } = await supabase.auth.refreshSession({ 
-            refresh_token: refreshToken,
-        }); // renueva el token de acceso usando el token de refressh
-        if (error) throw new Error('Error al refrescar el token');
-        return res.send({
-            accessToken: data.session?.access_token,
-            refreshToken: data.session?.refresh_token,
-        });
-    } catch (error) {
-        console.error("Error en refreshAccessToken:", error);
-        return res.status(500).send({ msg: "Error del servidor", error });
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(400).json({ msg: "refreshToken es requerido" });
     }
+
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+
+    if (error) {
+      throw new Error('Error al refrescar el token');
+    }
+
+    return res.status(200).json({
+      accessToken: data.session?.access_token,
+      refreshToken: data.session?.refresh_token,
+    });
+
+  } catch (error) {
+    console.error("Error en refreshAccessToken:", error);
+    return res.status(500).json({ 
+      msg: "Error del servidor", 
+      error: error.message 
+    });
+  }
 }
 
 export const AuthController = {
-    register,
-    login,
-    refreshAccessToken,
+  register,
+  login,
+  refreshAccessToken,
 };
