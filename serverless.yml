@@ -1,0 +1,29 @@
+service: gopoolservices # Nombre del servicio (puedes cambiarlo)
+
+provider:
+  name: aws # Proveedor de la nube (AWS)
+  runtime: nodejs20.x # Versión de Node.js (coincide con tu Node.js v20.17.0)
+  region: us-east-1 # Región de AWS (cámbiala si prefieres otra, ej. us-west-2)
+  stage: dev # Entorno (puedes usar prod, staging, etc.)
+  timeout: 30 # Tiempo máximo de ejecución por invocación (en segundos)
+  memorySize: 128 # Memoria asignada a la función Lambda (en MB, ajusta si necesitas más)
+
+functions:
+  app:
+    handler: app.handler # Apunta al archivo y función exportada (module.exports.handler en app.js)
+    events:
+      - http:
+          path: / # Maneja solicitudes en la raíz
+          method: ANY # Acepta cualquier método HTTP (GET, POST, etc.)
+          cors: true # Habilita CORS
+      - http:
+          path: /{proxy+} # Maneja todas las demás rutas (ej. /api, /api/user, etc.)
+          method: ANY
+          cors: true # Habilita CORS
+
+plugins:
+  - serverless-offline # Plugin para pruebas locales (opcional, pero recomendado)
+
+package:
+  exclude:
+    - uploads/** # Excluye el directorio uploads para reducir el tamaño del paquete

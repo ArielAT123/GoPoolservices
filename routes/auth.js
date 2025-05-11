@@ -11,6 +11,7 @@ api.use(express.json());
 
 
 api.post("/auth/register", AuthController.register);
+api.get("/hello", AuthController.hello);
 api.post("/auth/login", AuthController.login);
 api.post("/auth/refresh_access_token", AuthController.refreshAccessToken);
 
