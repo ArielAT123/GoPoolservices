@@ -1,5 +1,4 @@
 import express from "express";
-import bodyParser from "body-parser";
 import cors from "cors";
 import morgan from "morgan";
 import { authRoutes, userRoutes, travelRoutes, } from "./routes/index.js"; // Asegúrate de importar tus rutas
@@ -24,24 +23,9 @@ app.use((req, res, next) => {
   next();
 });
 
-
-// Middleware para parsear JSON (versión mejorada)
-// app.use(express.json({
-//   verify: (req, res, buf) => {
-//     try {
-//       if (buf && buf.length) {
-//         req.rawBody = buf.toString();
-//       }
-//     } catch (e) {
-//       console.error("Error parsing JSON:", e);
-//     }
-//   }
-// }));
-
 // Middleware adicional para asegurar el parseo
 app.use(express.json()); // ¡Solo esto es suficiente para parsear JSON!
 app.use(express.urlencoded({ extended: true })); // Para formularios
-
 
 // Configuración de rutas
 app.use("/api", authRoutes);
