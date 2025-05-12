@@ -1,43 +1,34 @@
 import express from "express";
+import bodyParser from "body-parser";
 import cors from "cors";
+import http from "http";
 import morgan from "morgan";
-import { authRoutes, userRoutes, travelRoutes, } from "./routes/index.js"; // Asegúrate de importar tus rutas
-import serverless from "serverless-http";
+import { initSocketServer } from "./utils/index.js";
+
+import {
+  authRoutes,
+  userRoutes,
+  travelRoutes,
+} from "./routes/index.js";
+
+
 
 const app = express();
+const server = http.createServer(app);
 
-// Middlewares mejorados
+// Inicializar servidor de sockets
+initSocketServer(server);
+
+// Middlewares generales
 app.use(cors());
 app.use(morgan("dev"));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(express.static("uploads"));
 
-// Middleware personalizado para parsear el cuerpo de la solicitud
-app.use((req, res, next) => {
-  if (req.apiGateway && req.apiGateway.event && req.apiGateway.event.body) {
-    try {
-      req.body = JSON.parse(req.apiGateway.event.body);
-    } catch (err) {
-      console.error("Error parsing JSON:", err);
-      return res.status(400).json({ error: "Invalid JSON" });
-    }
-  }
-  next();
-});
-
-// Middleware adicional para asegurar el parseo
-app.use(express.json()); // ¡Solo esto es suficiente para parsear JSON!
-app.use(express.urlencoded({ extended: true })); // Para formularios
-
-// Configuración de rutas
+// Rutas agrupadas bajo /api
 app.use("/api", authRoutes);
 app.use("/api/user", userRoutes);
-// app.use("/api/viajes", travelRoutes);
-app.get('/s', (req, res) => {
-  res.send('ESTANNNN PASANDOOO COSASSSSSSS');
-});
-// Manejador de errores
-app.use((err, req, res, next) => {
-  console.error("Error:", err);
-  res.status(500).json({ error: "Internal Server Error" });
-});
+app.use("/api/viajes", travelRoutes);
 
-export const handler = serverless(app);
+export { server };

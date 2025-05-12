@@ -17,194 +17,275 @@ return User.existsByEmail(supabase, email); // Devuelve la Promise
 }
 
 async function registerDriver(req, res) {
-try {
-    const { email, password, fotoDriver, fotoLicencia, numeroLicencia } = req.body;
+    try {
+        const { email, password, fotoDriver, fotoLicencia, numeroLicencia, fechanacimiento } = req.body;
 
-    // 1. Validar campos requeridos
-    if (!email || !password) {
-    return res.status(400).json({ 
-        error: { message: 'Email y contraseña son requeridos para verificar la cuenta' } 
-    });
-    }
+        // 1. Validación de campos requeridos
+        const requiredFields = ['email', 'password', 'fotoDriver', 'fotoLicencia', 'numeroLicencia', 'fechanacimiento'];
+        const missingFields = requiredFields.filter(field => !req.body[field]);
 
-    if (!fotoDriver || !fotoLicencia || !numeroLicencia) {
-    return res.status(400).json({ 
-        error: { 
-        message: 'Datos de conductor incompletos',
-        required: ['fotoDriver', 'fotoLicencia', 'numeroLicencia']
-        } 
-    });
-    }
-
-    // 2. Verificar credenciales (autenticar al usuario primero)
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email,
-    password
-    });
-
-    if (authError) {
-    return res.status(401).json({
-        error: { 
-        message: 'Credenciales inválidas o cuenta no existente',
-        details: authError.message 
+        if (missingFields.length > 0) {
+            return res.status(400).json({ 
+                error: { 
+                    message: 'Campos requeridos faltantes',
+                    missing_fields: missingFields 
+                } 
+            });
         }
-    });
-    }
 
-    const userId = authData.user.id;
+        // 2. Verificar credenciales (autenticar al usuario primero)
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
 
-    // 3. Verificar si ya existe registro en dhvar
-    const { data: existingDriver, error: driverError } = await supabase
-    .from('dhvar')
-    .select('id')
-    .eq('id', userId)
-    .maybeSingle();
+        if (authError) {
+            return res.status(401).json({
+                error: { 
+                    message: authError.message.includes('Invalid login credentials') ? 
+                        'Credenciales inválidas' : 'Error al verificar la cuenta',
+                    details: process.env.NODE_ENV === 'development' ? authError.message : null
+                }
+            });
+        }
 
-    if (existingDriver) {
-    return res.status(409).json({ 
-        error: { message: 'Este usuario ya completó su registro como conductor' } 
-    });
-    }
+        const userId = authData.user.id;
 
-    // 4. Insertar datos del conductor
-    const { data: driverData, error: insertError } = await supabase
-    .from('dhvar')
-    .insert({
-        id: userId,
-        fotoDriver,
-        fotoLicencia,
-        numeroLicencia
-    })
-    .select()
-    .single();
+        // 3. Verificar si ya existe registro en la tabla driver
+        const { data: existingDriver, error: driverError } = await supabase
+            .from('driver')
+            .select('id, verificado')
+            .eq('id', userId)
+            .maybeSingle();
 
-    if (insertError) {
-    throw new Error(insertError.message);
-    }
+        if (driverError) {
+            throw new Error(`Error al verificar conductor existente: ${driverError.message}`);
+        }
 
-    // 5. Actualizar rol en tabla users (opcional)
-    await supabaseAdmin
-    .from('users')
-    .update({ rol: 'conductor' })
-    .eq('id', userId);
+        if (existingDriver) {
+            return res.status(409).json({ 
+                error: { 
+                    message: existingDriver.verificado ? 
+                        'Ya eres un conductor verificado' : 
+                        'Ya tienes un registro de conductor pendiente de verificación'
+                } 
+            });
+        }
 
-    // 6. Respuesta exitosa
-    return res.status(201).json({
-    message: 'Registro de conductor completado exitosamente',
-    driver: driverData,
-    user: {
-        id: userId,
-        email: authData.user.email,
-        rol: 'conductor'
-    }
-    });
+        // 4. Validar formato del número de licencia
+        if (!/^[A-Za-z0-9]{8,20}$/.test(numeroLicencia)) {
+            return res.status(400).json({
+                error: {
+                    message: 'El número de licencia debe tener entre 8 y 20 caracteres alfanuméricos'
+                }
+            });
+        }
 
-} catch (error) {
-    console.error('Error en registerDriver:', error);
-    return res.status(500).json({ 
-    error: { 
-        message: 'Error al completar registro de conductor',
-        details: process.env.NODE_ENV === 'development' ? error.message : null
-    } 
-    });
-}
-}
+        // 5. Validar fecha de nacimiento
+        const fechaNac = new Date(fechanacimiento);
+        const edadMinima = new Date();
+        edadMinima.setFullYear(edadMinima.getFullYear() - 18); // Mínimo 18 años
 
+        if (fechaNac > edadMinima) {
+            return res.status(400).json({
+                error: {
+                    message: 'Debes tener al menos 18 años para registrarte como conductor'
+                }
+            });
+        }
 
-async function register(req, res) {
-try {
-    const { email, password } = req.body;
+        // 6. Insertar datos del conductor
+        const { data: driverData, error: insertError } = await supabase
+            .from('driver')
+            .insert({
+                id: userId,
+                fotoDriver,
+                fotoLicencia,
+                numeroLicencia,
+                fechanacimiento: fechaNac.toISOString(),
+                verificado: false, // Por defecto no verificado
+                fecha_registro: new Date().toISOString()
+            })
+            .select('id, numeroLicencia, fecha_registro')
+            .single();
 
-    // Validar campos requeridos
-    if (!email || !password) {
-    return res.status(400).json({ 
-        error: { message: 'Email y contraseña son requeridos' } 
-    });
-    }
+        if (insertError) {
+            throw new Error(`Error al insertar conductor: ${insertError.message}`);
+        }
 
-    // Validar formato de email
-    if (!isValidEmail(email)) {
-    return res.status(400).json({ 
-        error: { message: 'Por favor ingresa un email válido' } 
-    });
-    }
+        // 7. Actualizar rol en tabla users (opcional pero recomendado)
+        const { error: updateError } = await supabaseAdmin
+            .from('users')
+            .update({ 
+                rol: 'conductor_pendiente',
+                last_updated: new Date().toISOString()
+            })
+            .eq('id', userId);
 
-    // Validar contraseña
-    if (!isValidPassword(password)) {
-    return res.status(400).json({ 
-        error: { 
-        message: 'La contraseña debe tener al menos 6 caracteres, incluyendo letras y números' 
-        } 
-    });
-    }
+        if (updateError) {
+            console.error('Error al actualizar rol:', updateError);
+            // No hacemos return aquí porque el registro en driver ya fue exitoso
+        }
 
-    // Verificar si el email existe en la tabla users (esperamos la Promise)
-    const userExists = await isUserExist(email);
-    console.log("ESTA registrado?", userExists); // Ahora mostrará true o false
-    if (userExists) {
-    return res.status(409).json({ 
-        error: { message: 'El email ya está registrado en la tabla users' } 
-    });
-    }
+        // 8. Respuesta exitosa
+        return res.status(201).json({
+            success: true,
+            message: 'Registro de conductor completado. Pendiente de verificación.',
+            driver: {
+                id: driverData.id,
+                numeroLicencia: driverData.numeroLicencia,
+                fechaRegistro: driverData.fecha_registro
+            },
+            user: {
+                id: userId,
+                email: authData.user.email,
+                rol: 'conductor_pendiente'
+            }
+        });
 
-    // Registrar usuario en Supabase Auth
-    const { data, error: authError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-    // emailRedirectTo: `${process.env.FRONTEND_URL}/auth/confirm` // URL para confirmación de email
-    }
-    });
-
-    if (authError) {
-    // Manejar el caso de email ya registrado en auth.users
-    if (authError.message.includes('User already registered')) {
-        return res.status(409).json({ 
-        error: { message: 'El email ya está registrado en el sistema' } 
+    } catch (error) {
+        console.error('Error en registerDriver:', error);
+        return res.status(500).json({ 
+            error: { 
+                message: 'Error al procesar el registro de conductor',
+                details: process.env.NODE_ENV === 'development' ? error.message : null
+            } 
         });
     }
-    return res.status(400).json({ 
-        error: { 
-        message: 'Error al registrar usuario',
-        details: authError.message 
-        } 
-    });
-    }
-
-    // Sincronizar con la tabla users usando supabaseAdmin
-    if (data.user) {
-    await supabaseAdmin.from('users').insert({
-        id: data.user.id,
-        email: data.user.email,
-        nombre: '', // Valores por defecto (ajusta según tus necesidades)
-        username: '',
-        lastname: '',
-        nummatricula: '',
-        fechanacimiento: null,
-        fotommatricula: '',
-    }).select();
-    }
-
-    // Respuesta exitosa
-    return res.status(201).json({
-    user: data.user,
-    session: data.session ? {
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-        expires_at: data.session.expires_at
-    } : null,
-    email_confirmed: data.user?.email_confirmed_at !== null
-    });
-
-} catch (error) {
-    console.error('Error en el registro:', error);
-    return res.status(500).json({ 
-    error: { 
-        message: 'Error interno del servidor',
-        details: process.env.NODE_ENV === 'development' ? error.message : null
-    } 
-    });
 }
+async function register(req, res) {
+    try {
+        const { email, password, metadata } = req.body;
+
+        // 1. Validación básica de campos
+        if (!email || !password) {
+            return res.status(400).json({ 
+                error: { message: 'Email y contraseña son requeridos' } 
+            });
+        }
+
+        // 2. Validar formato de email
+        if (!isValidEmail(email)) {
+            return res.status(400).json({ 
+                error: { message: 'Por favor ingresa un email válido' } 
+            });
+        }
+
+        // 3. Validar fortaleza de contraseña
+        if (!isValidPassword(password)) {
+            return res.status(400).json({ 
+                error: { 
+                    message: 'La contraseña debe tener al menos 8 caracteres, incluyendo letras mayúsculas, minúsculas y números' 
+                } 
+            });
+        }
+
+        // 4. Validar metadata
+        if (!metadata || typeof metadata !== 'object') {
+            return res.status(400).json({ 
+                error: { message: 'Se requiere metadata válida para el registro' } 
+            });
+        }
+
+        // 5. Validar campos obligatorios en metadata
+        const requiredMetadataFields = ['nombre', 'usuario', 'lastname', 'nummatricula'];
+        const missingFields = requiredMetadataFields.filter(field => !metadata[field]);
+
+        if (missingFields.length > 0) {
+            return res.status(400).json({ 
+                error: { 
+                    message: 'Faltan campos obligatorios en metadata',
+                    missing_fields: missingFields 
+                } 
+            });
+        }
+
+        // 6. Verificar si el usuario ya existe
+        const userExists = await isUserExist(email);
+        if (userExists) {
+            return res.status(409).json({ 
+                error: { message: 'El usuario ya está registrado' } 
+            });
+        }
+
+        // 7. Registrar usuario en Supabase Auth
+        const { data, error: authError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: { // Metadata que se guardará en auth.users
+                    nombre: metadata.nombre,
+                    usuario: metadata.usuario,
+                    lastname: metadata.lastname
+                }
+            }
+        });
+
+        if (authError) {
+            console.error('Error en auth:', authError);
+            return res.status(400).json({ 
+                error: { 
+                    message: authError.message.includes('User already registered') ? 
+                        'El email ya está registrado' : 'Error en el registro',
+                    details: process.env.NODE_ENV === 'development' ? authError.message : null
+                } 
+            });
+        }
+
+        // 8. Insertar en la tabla users
+        const userData = {
+            id: data.user.id,
+            email: data.user.email,
+            nombre: metadata.nombre,
+            username: metadata.usuario,
+            lastname: metadata.lastname,
+            nummatricula: metadata.nummatricula,
+            fechanacimiento: metadata.fechanacimiento || null,
+            fotomatricula: metadata.fotomatricula || null,
+            //created_at: new Date().toISOString()
+        };
+
+        const { error: dbError } = await supabaseAdmin
+            .from('users')
+            .insert(userData);
+
+        if (dbError) {
+            console.error('Error al insertar en users:', dbError);
+            
+            // Opcional: Revertir el registro en auth si falla la inserción
+            await supabase.auth.admin.deleteUser(data.user.id);
+            
+            return res.status(500).json({ 
+                error: { 
+                    message: 'Error al crear el perfil de usuario',
+                    details: process.env.NODE_ENV === 'development' ? dbError.message : null
+                } 
+            });
+        }
+
+        // 9. Respuesta exitosa
+        return res.status(201).json({
+            success: true,
+            user: {
+                id: data.user.id,
+                email: data.user.email,
+                ...userData
+            },
+            session: data.session ? {
+                access_token: data.session.access_token,
+                expires_at: data.session.expires_at
+            } : null
+        });
+
+    } catch (error) {
+        console.error('Error en el registro:', error);
+        return res.status(500).json({ 
+            error: { 
+                message: 'Error interno del servidor',
+                details: process.env.NODE_ENV === 'development' ? error.message : null
+            } 
+        });
+    }
 }
 
 async function login(req, res) {
@@ -250,7 +331,7 @@ try {
     user: {
         id: user.id,
         email: user.email,
-        email_verified: user.email_confirmed || user.user_metadata?.email_verified
+        email_verified: user.email_confirmed_at || user.user_metadata?.email_verified
     }
     });
 
