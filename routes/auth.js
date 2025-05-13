@@ -15,6 +15,6 @@ api.get("/hello", AuthController.hello);
 api.post("/auth/login", AuthController.login);
 api.post("/auth/refresh_access_token", AuthController.refreshAccessToken);
 api.post("/auth/register-driver", AuthController.registerDriver);
-
+api.post("/auth/register-driverform", AuthController.registerDriverCompleteForm);
 
 export const authRoutes = api;

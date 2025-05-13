@@ -3,8 +3,13 @@ import { User } from "../models/User.js";
 
 // Validar formato de email
 function isValidEmail(email) {
-const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-return re.test(email);
+    // Validación general de formato de email
+    const generalEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
+    // Validación específica para dominio ESPOL
+    const espolRegex = /^[^\s@]+@espol\.edu\.ec$/;
+    
+    return generalEmailRegex.test(email) && espolRegex.test(email);
 }
 
 // Validar contraseña (mínimo 6 caracteres, ejemplo mejorado)
@@ -373,6 +378,191 @@ try {
 }
 }
 
+async function registerDriverCompleteForm(req, res) {
+    try {
+        const { email, password, metadata } = req.body;
+
+        // 1. Validación básica de campos
+        if (!email || !password) {
+            return res.status(400).json({ 
+                error: { message: 'Email y contraseña son requeridos' } 
+            });
+        }
+
+        // 2. Validar formato de email
+        if (!isValidEmail(email)) {
+            return res.status(400).json({ 
+                error: { message: 'Por favor ingresa un email válido' } 
+            });
+        }
+
+        // 3. Validar fortaleza de contraseña
+        if (!isValidPassword(password)) {
+            return res.status(400).json({ 
+                error: { 
+                    message: 'La contraseña debe tener al menos 8 caracteres, incluyendo letras mayúsculas, minúsculas y números' 
+                } 
+            });
+        }
+
+        // 4. Validar metadata y campos requeridos
+        if (!metadata || typeof metadata !== 'object') {
+            return res.status(400).json({ 
+                error: { message: 'Se requiere metadata válida para el registro' } 
+            });
+        }
+
+        // Campos requeridos para usuario
+        const requiredUserFields = ['nombre', 'usuario', 'lastname', 'nummatricula','fechanacimiento', 'fotomatricula'];
+        // Campos requeridos para conductor
+        const requiredDriverFields = ['fotoDriver', 'fotoLicencia', 'numeroLicencia', ];
+        
+        const missingUserFields = requiredUserFields.filter(field => !metadata[field]);
+        const missingDriverFields = requiredDriverFields.filter(field => !metadata[field]);
+
+        if (missingUserFields.length > 0 || missingDriverFields.length > 0) {
+            return res.status(400).json({ 
+                error: { 
+                    message: 'Faltan campos obligatorios',
+                    missing_user_fields: missingUserFields,
+                    missing_driver_fields: missingDriverFields
+                } 
+            });
+        }
+
+        // 5. Validar formato del número de licencia
+        if (!/^[A-Za-z0-9]{8,20}$/.test(metadata.numeroLicencia)) {
+            return res.status(400).json({
+                error: {
+                    message: 'El número de licencia debe tener entre 8 y 20 caracteres alfanuméricos'
+                }
+            });
+        }
+
+        // 6. Validar fecha de nacimiento (mínimo 18 años)
+        const fechaNac = new Date(metadata.fechanacimiento);
+        const edadMinima = new Date();
+        edadMinima.setFullYear(edadMinima.getFullYear() - 18);
+
+        if (fechaNac > edadMinima) {
+            return res.status(400).json({
+                error: {
+                    message: 'Debes tener al menos 18 años para registrarte como conductor'
+                }
+            });
+        }
+
+        // 7. Verificar si el usuario ya existe
+        const userExists = await isUserExist(email);
+        if (userExists) {
+            return res.status(409).json({ 
+                error: { message: 'El usuario ya está registrado' } 
+            });
+        }
+
+        // 8. Registrar usuario en Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email,
+            password            
+        });
+
+        if (authError) {
+            console.error('Error en auth:', authError);
+            return res.status(400).json({ 
+                error: { 
+                    message: authError.message.includes('User already registered') ? 
+                        'El email ya está registrado' : 'Error en el registro',
+                    details: process.env.NODE_ENV === 'development' ? authError.message : null
+                } 
+            });
+        }
+
+        const userId = authData.user.id;
+
+        // 9. Insertar en la tabla users (pública)
+        const userData = {
+            id: userId,
+            email: authData.user.email,
+            nombre: metadata.nombre,
+            username: metadata.usuario,
+            lastname: metadata.lastname,
+            nummatricula: metadata.nummatricula,
+            fechanacimiento: metadata.fechanacimiento || null,
+            fotomatricula: metadata.fotomatricula || null,
+        };
+
+        const { error: userInsertError } = await supabaseAdmin
+            .from('users')
+            .insert(userData);
+
+        if (userInsertError) {
+            console.error('Error al insertar en users:', userInsertError);
+            // Revertir el registro en auth si falla
+            await supabase.auth.admin.deleteUser(userId);
+            return res.status(500).json({ 
+                error: { 
+                    message: 'Error al crear el perfil de usuario',
+                    details: process.env.NODE_ENV === 'development' ? userInsertError.message : null
+                } 
+            });
+        }
+
+        // 10. Insertar en la tabla driver
+        const driverData = {
+            id: userId,
+            fotoDriver: metadata.fotoDriver,
+            fotoLicencia: metadata.fotoLicencia,
+            numeroLicencia: metadata.numeroLicencia,
+        };
+
+        const { error: driverInsertError } = await supabaseAdmin
+            .from('driver')
+            .insert(driverData);
+
+        if (driverInsertError) {
+            console.error('Error al insertar en driver:', driverInsertError);
+            // Revertir: eliminar de users y auth
+            await supabaseAdmin.from('users').delete().eq('id', userId);
+            await supabase.auth.admin.deleteUser(userId);
+            return res.status(500).json({ 
+                error: { 
+                    message: 'Error al crear el perfil de conductor',
+                    details: process.env.NODE_ENV === 'development' ? driverInsertError.message : null
+                } 
+            });
+        }
+
+        // 11. Respuesta exitosa
+        return res.status(201).json({
+            success: true,
+            message: 'Registro de conductor completado. Pendiente de verificación.',
+            user: {
+                id: userId,
+                email: authData.user.email,
+                nombre: userData.nombre,
+                username: userData.username,
+            },
+            driver: {
+                numeroLicencia: driverData.numeroLicencia,
+                fechaRegistro: driverData.fecha_registro
+            },
+            session: authData.session ? {
+                access_token: authData.session.access_token,
+                expires_at: authData.session.expires_at
+            } : null
+        });
+
+    } catch (error) {
+        console.error('Error en registerDriverCompleteForm:', error);
+        return res.status(500).json({ 
+            error: { 
+                message: 'Error interno del servidor',
+                details: process.env.NODE_ENV === 'development' ? error.message : null
+            } 
+        });
+    }
+}
+
 function hello(req, res) {
     return res.status(200).json({ msg: "hola guapo" });
 }
@@ -382,5 +572,6 @@ register,
 login,
 refreshAccessToken,
 registerDriver,
-hello
+hello,
+registerDriverCompleteForm,
 };
