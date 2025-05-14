@@ -8,7 +8,8 @@ import { initSocketServer } from "./utils/index.js";
 import {
   authRoutes,
   userRoutes,
-  travelRoutes,
+  vehiculoRoutes,
+  viajesRoutes,
 } from "./routes/index.js";
 
 
@@ -29,6 +30,7 @@ app.use(express.static("uploads"));
 // Rutas agrupadas bajo /api
 app.use("/api", authRoutes);
 app.use("/api/user", userRoutes);
-app.use("/api/viajes", travelRoutes);
+app.use("/api/viajes", viajesRoutes);
+app.use("api/vehiculo", vehiculoRoutes)
 
 export { server };

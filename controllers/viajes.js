@@ -1,112 +1,134 @@
-import supabase from "../supaBaseCliente.js";
+import supabase from '../supaBaseCliente.js';
+import { Viaje } from '../models/Viaje.js';
 
-export const createTravel = async (req, res) => {
-  try {
-    const { cuposDisponibles, horaSalida, horaEstimacionLlegada, bloqueoPasajeros, puntosRuta, pasajeros } = req.body;
+async function crearViaje(req, res) {
+    try {
+        const { 
+            cuposDisponibles, 
+            id_driver, 
+            horaSalida, 
+            horaestimacionllegada, 
+            bloqueopasajeros 
+        } = req.body;
 
-    // Step 1: Get the authenticated user's ID from the request (set by mdAuth middleware)
-    const userId = req.user.id; // Assuming mdAuth.asureAuth attaches the user to req.user
-
-    // Step 2: Verify the user exists in the users table
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', userId)
-      .single();
-    if (userError || !user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Step 3: Verify the user is a driver in the Driver table
-    const { data: driver, error: driverError } = await supabase
-      .from('Driver')
-      .select('id')
-      .eq('idUser', userId)
-      .single();
-    if (driverError || !driver) {
-      return res.status(403).json({ message: 'User is not a registered driver' });
-    }
-    const driverId = driver.id;
-
-    // Step 4: Create the trip in RutaDriver
-    const { data: rutaDriver, error: rutaDriverError } = await supabase
-      .from('RutaDriver')
-      .insert({
-        cuposDisponibles,
-        driver: driverId,
-        horaSalida, // Format: 'HH:MM:SS'
-        horaEstimacionLlegada, // Format: 'HH:MM:SS'
-        bloqueoPasajeros: bloqueoPasajeros || false,
-      })
-      .select('id')
-      .single();
-    if (rutaDriverError) {
-      throw new Error(rutaDriverError.message);
-    }
-    const rutaDriverId = rutaDriver.id;
-
-    // Step 5: Insert route points into PuntosRuta
-    if (puntosRuta && Array.isArray(puntosRuta)) {
-      const puntosRutaToInsert = puntosRuta.map(punto => ({
-        idRutaDriver: rutaDriverId,
-        orden: punto.orden,
-        descripcion: punto.descripcion,
-        longitud: punto.longitud,
-        latitud: punto.latitud,
-      }));
-      const { error: puntosRutaError } = await supabase
-        .from('PuntosRuta')
-        .insert(puntosRutaToInsert);
-      if (puntosRutaError) {
-        throw new Error(puntosRutaError.message);
-      }
-    }
-
-    // Step 6: Insert passengers into Pasajeros
-    if (pasajeros && Array.isArray(pasajeros)) {
-      for (const pasajero of pasajeros) {
-        const { userId: pasajeroId, waltUserUbicacionLongitud, waltUserUbicacionLatitud, saldo, recogido } = pasajero;
-
-        // Verify the passenger exists in the users table
-        const { data: pasajeroData, error: pasajeroError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('id', pasajeroId)
-          .single();
-        if (pasajeroError || !pasajeroData) {
-          return res.status(404).json({ message: `Passenger with ID ${pasajeroId} not found` });
+        // Validación básica de datos requeridos
+        if (!cuposDisponibles || !id_driver || !horaSalida) {
+            return res.status(400).json({
+                msg: "Datos incompletos",
+                required_fields: ["cuposDisponibles", "id_driver", "horaSalida"]
+            });
         }
 
-        const { error: pasajeroInsertError } = await supabase
-          .from('Pasajeros')
-          .insert({
-            RutaDriverId: rutaDriverId,
-            userId: pasajeroId,
-            waltUserUbicacionLongitud,
-            waltUserUbicacionLatitud,
+        const result = await Viaje.crearViaje(
+            supabase,
+            cuposDisponibles,
+            id_driver,
+            horaSalida,
+            horaestimacionllegada,
+            bloqueopasajeros
+        );
+
+        return res.status(201).json({
+            msg: "Viaje creado exitosamente",
+            data: result
+        });
+
+    } catch (error) {
+        console.error('Error en crearViaje:', error);
+        return res.status(500).json({
+            msg: "Error al crear viaje",
+            error: error.message
+        });
+    }
+}
+
+async function unirseAViaje(req, res) {
+    try {
+        const { 
+            id_viaje, 
+            userid, 
+            waltuserubicacionlongitud, 
+            waltuserubicacionlatitud, 
+            saldo, 
+            recogido,
+            cantidad_cupos 
+        } = req.body;
+
+        // Validación de datos requeridos
+        if (!id_viaje || !userid || cantidad_cupos === undefined) {
+            return res.status(400).json({
+                msg: "Datos incompletos",
+                required_fields: ["id_viaje", "userid", "cantidad_cupos"]
+            });
+        }
+
+        // 1. Validar y actualizar cupos disponibles
+        const updatedViaje = await Viaje.updateCupo(
+            supabase,
+            cantidad_cupos,
+            id_viaje
+        );
+
+        if (!updatedViaje) {
+            return res.status(400).json({
+                msg: "No se pudo actualizar los cupos del viaje",
+                error: "No hay suficientes cupos disponibles"
+            });
+        }
+
+        // 2. Registrar al pasajero en el viaje
+        const result = await Viaje.consumirCupodeViaje(
+            supabase,
+            id_viaje,
+            userid,
+            waltuserubicacionlongitud,
+            waltuserubicacionlatitud,
             saldo,
-            recogido: recogido || false,
-          });
-        if (pasajeroInsertError) {
-          throw new Error(pasajeroInsertError.message);
-        }
-      }
+            recogido
+        );
+
+        return res.status(200).json({
+            msg: "Te has unido al viaje exitosamente",
+            viaje: updatedViaje,
+            registro: result
+        });
+
+    } catch (error) {
+        console.error('Error en unirseAViaje:', error);
+        return res.status(500).json({
+            msg: "Error al unirse al viaje",
+            error: error.message
+        });
     }
+}
 
-    // Step 7: Return success response
-    return res.status(201).json({
-      message: 'Trip created successfully',
-      rutaDriverId,
-    });
+async function obtenerCuposDisponibles(req, res) {
+    try {
+        const { id_viaje } = req.params;
 
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Error creating trip', error: error.message });
-  }
+        if (!id_viaje) {
+            return res.status(400).json({
+                msg: "ID de viaje requerido"
+            });
+        }
 
+        const cupos = await Viaje.cuposDisponibles(supabase, id_viaje);
 
-  
-};
-export const ViajesController = {
-    createTravel,
+        return res.status(200).json({
+            cuposDisponibles: cupos
+        });
+
+    } catch (error) {
+        console.error('Error en obtenerCuposDisponibles:', error);
+        return res.status(500).json({
+            msg: "Error al obtener cupos disponibles",
+            error: error.message
+        });
+    }
+}
+
+export const ViajeController = {
+    crearViaje,
+    unirseAViaje,
+    obtenerCuposDisponibles
 };

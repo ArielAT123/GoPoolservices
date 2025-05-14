@@ -1,6 +1,26 @@
 export class Viaje {
     static tablerutaDriver = 'rutadriver';
     static tablepasajeros = 'pasajeros';
+
+    static async cuposDisponibles(supabase, id_viaje) {
+    try {
+        const { data, error } = await supabase
+            .from(this.tablerutaDriver)
+            .select('cuposdisponibles')
+            .eq('id', id_viaje);
+            
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+            return data[0].cuposdisponibles;
+        }
+        return null;
+        
+    } catch (error) {
+        console.error('Error al obtener cupos disponibles:', error);
+        throw error; // O maneja el error según necesites
+    }
+}
     static async crearViaje(supabase, cuposDisponibles, id_driver, horaSalida, horaestimacionllegada, bloqueopasajeros) {
         try {
             const { error } = await supabase
@@ -36,13 +56,41 @@ export class Viaje {
                 });
 
             if (error) throw error;
-            const { data, error2 } = await supabase
-            .from(this.tablerutaDriver)
-            .update(updates)
             return { message: "Viaje agregado correctamente" };
         } catch (error) {
             console.error('Error en agregarViaje:', error);
             throw new Error('Error al agregar viaje');
         }
     }
+
+static async updateCupo(supabase, cantidad_cupos, id_viaje) {
+    try {
+        // 1. Obtener cupos disponibles actuales
+        const { cuposDisponibles } = await this.cuposDisponibles(supabase, id_viaje);
+        
+        // 2. Calcular nuevos cupos
+        const cuposResultantes = cuposDisponibles - cantidad_cupos;
+        
+        // 3. Validar que haya suficientes cupos
+        if (cuposResultantes >= 0) {  // Cambié > por >= para permitir llegar a 0
+            // 4. Actualizar en Supabase
+            const { data, error } = await supabase
+                .from(this.tablerutaDriver)
+                .update({ cuposdisponibles: cuposResultantes })
+                .eq('id', id_viaje);
+            
+            if (error) {
+                throw error;
+            }
+            
+            console.log('Cupos actualizados con éxito:', data);
+            return data;
+        } else {
+            throw new Error('No hay suficientes cupos disponibles');
+        }
+    } catch (error) {
+        console.error('Error al actualizar cupos:', error.message);
+        return null;
+    }
+}
 }

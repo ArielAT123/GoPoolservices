@@ -1,10 +1,10 @@
 import express from 'express';
-import { createTravel } from '../controllers/viajes.js';
-import { mdAuth } from '../middlewares/authenticated.js';
+import { ViajeController } from '../controllers/viajes.js';
 
 const api = express.Router();
 
-// Route to create a new trip
-api.post('/crear-viaje', [mdAuth.asureAuth], createTravel);
+api.post('/crear', ViajeController.crearViaje);
+api.post('/unirse', ViajeController.unirseAViaje);
+api.get('/cupos/:id_viaje', ViajeController.obtenerCuposDisponibles);
 
-export const travelRoutes = api;
+export const viajesRoutes = api;
