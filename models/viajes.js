@@ -48,7 +48,7 @@ export class Viaje {
                 .from(this.tablepasajeros)
                 .insert({
                     idrutadriver: rutadriverId,
-                    idpasajero: userid,
+                    userid: userid,
                     waltuserubicacionlongitud: waltuserubicacionlongitud,
                     waltuserubicacionlatitud: waltuserubicacionlatitud,
                     saldo: saldo,
