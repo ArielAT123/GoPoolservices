@@ -93,4 +93,46 @@ static async updateCupo(supabase, cantidad_cupos, id_viaje) {
         return null;
     }
 }
+static async obtenerlistaPasajeros(supabase, idRuta){
+    try {
+        const {data, error}= await supabase
+        .from(this.tablepasajeros)
+        .select("userid,waltuserubicacionlongitud, waltuserubicacionlatitud, saldo, recogido")
+        .eq("rutadriverid",idRuta)
+        if(error){
+            throw error;
+        }
+        console.log("Lista de pasajeros Obtenida", data);
+        return data;
+    } catch (error) {
+        console.error("Error al obtener la lista de Pasajeros");
+        return null;
+    }
+
+}
+
+static async eliminarPasajeroDeRuta(supabase, idRuta, idUsuario) {
+  try {
+    // Realizamos la eliminación usando la clave compuesta (idruta, idusuario)
+    const { data, error } = await supabase
+      .from(this.tablepasajeros) // Nombre de la tabla
+      .delete()
+      .eq('rutadriverid', idRuta)    // Filtro por idruta
+      .eq('userid', idUsuario); // Filtro por idusuario
+
+    if (error) {
+      console.error('Error al eliminar el pasajero:', error);
+      throw new Error('Error al eliminar el pasajero de la ruta');
+    }
+
+    console.log('Pasajero eliminado correctamente', data);
+    return { message: 'Pasajero eliminado correctamente' };
+  } catch (error) {
+    console.error('Error en eliminarPasajeroDeRuta:', error);
+    throw new Error('Error al eliminar pasajero de la ruta :3');
+  }
+
+}
+
+
 }

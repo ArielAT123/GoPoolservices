@@ -127,8 +127,79 @@ async function obtenerCuposDisponibles(req, res) {
     }
 }
 
+async function cancelarViaje(req, res) {
+    try {
+        const { id_viaje } = req.params;
+        const {id_usuario}= req.body;
+
+        if (!id_viaje) {
+            return res.status(400).json({
+                msg: "ID de viaje requerido"
+            });
+        }
+
+        // Lógica para cancelar el viaje
+        const result = await Viaje.eliminarPasajeroDeRuta(supabase, id_viaje, id_usuario );
+
+        if (!result) {
+            return res.status(400).json({
+                msg: "No se pudo cancelar el viaje",
+                error: "El viaje no existe o ya está cancelado"
+            });
+        }
+
+        return res.status(200).json({
+            msg: "Viaje cancelado correctamente",
+            data: result
+        });
+
+    } catch (error) {
+        console.error('Error en cancelarViaje:', error);
+        return res.status(500).json({
+            msg: "Error al cancelar viaje",
+            error: error.message
+        });
+    }
+}
+
+async function obtenerPasajerosList(req, res) {
+    try {
+        const { id_viaje } = req.params;
+
+        if (!id_viaje) {
+            return res.status(400).json({
+                msg: "ID de viaje requerido"
+            });
+        }
+
+        // Obtener la lista de pasajeros para el viaje
+        const pasajeros = await Viaje.obtenerlistaPasajeros(supabase, id_viaje);
+
+        if (!pasajeros || pasajeros.length === 0) {
+            return res.status(404).json({
+                msg: "No se encontraron pasajeros para este viaje"
+            });
+        }
+
+        return res.status(200).json({
+            msg: "Lista de pasajeros obtenida correctamente",
+            pasajeros: pasajeros
+        });
+
+    } catch (error) {
+        console.error('Error en obtenerPasajerosList:', error);
+        return res.status(500).json({
+            msg: "Error al obtener la lista de pasajeros",
+            error: error.message
+        });
+    }
+}
+
+
 export const ViajeController = {
     crearViaje,
     unirseAViaje,
-    obtenerCuposDisponibles
+    obtenerCuposDisponibles,
+    cancelarViaje,
+    obtenerPasajerosList,
 };
