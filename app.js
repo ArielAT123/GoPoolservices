@@ -10,6 +10,7 @@ import {
   userRoutes,
   vehiculoRoutes,
   viajesRoutes,
+  rutasRoutes,
 } from "./routes/index.js";
 
 
@@ -32,5 +33,6 @@ app.use("/api", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/viajes", viajesRoutes);
 app.use("api/vehiculo", vehiculoRoutes)
+app.use("/api/rutas",rutasRoutes);
 
 export { server };

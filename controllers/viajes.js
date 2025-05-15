@@ -1,5 +1,5 @@
 import supabase from '../supaBaseCliente.js';
-import { Viaje } from '../models/Viaje.js';
+import { Viaje } from '../models/viajes.js';
 
 async function crearViaje(req, res) {
     try {
