@@ -1,5 +1,13 @@
 import supabase from '../supaBaseCliente.js';
-import { Viaje } from '../models/Viaje.js';
+import { Viaje } from '../models/viajes.js';
+
+async function mostrarViajesCercanos(req, res) {
+    try {
+        const{longitud, latitud}=req.body
+    } catch (error) {
+        
+    }    
+}
 
 async function crearViaje(req, res) {
     try {

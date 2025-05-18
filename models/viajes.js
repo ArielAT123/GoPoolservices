@@ -93,4 +93,13 @@ static async updateCupo(supabase, cantidad_cupos, id_viaje) {
         return null;
     }
 }
+
+/*static async getListaViajes(supabase, longitud, latitud){
+    try {
+        const{data, error}=await supabase
+        .from()
+    } catch (error) {
+        
+    }
+}*/
 }

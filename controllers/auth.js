@@ -23,10 +23,10 @@ return User.existsByEmail(supabase, email); // Devuelve la Promise
 
 async function registerDriver(req, res) {
     try {
-        const { email, password, fotoDriver, fotoLicencia, numeroLicencia, fechanacimiento } = req.body;
+        const { email, password, fotodriver, fotolicencia, numeroLicencia } = req.body;
 
         // 1. Validación de campos requeridos
-        const requiredFields = ['email', 'password', 'fotoDriver', 'fotoLicencia', 'numeroLicencia', 'fechanacimiento'];
+        const requiredFields = ['email', 'password', 'fotoDriver', 'fotoLicencia', 'numeroLicencia'];
         const missingFields = requiredFields.filter(field => !req.body[field]);
 
         if (missingFields.length > 0) {
@@ -59,7 +59,7 @@ async function registerDriver(req, res) {
         // 3. Verificar si ya existe registro en la tabla driver
         const { data: existingDriver, error: driverError } = await supabase
             .from('driver')
-            .select('id, verificado')
+            .select('id')
             .eq('id', userId)
             .maybeSingle();
 
@@ -87,11 +87,11 @@ async function registerDriver(req, res) {
         }
 
         // 5. Validar fecha de nacimiento
-        const fechaNac = new Date(fechanacimiento);
-        const edadMinima = new Date();
-        edadMinima.setFullYear(edadMinima.getFullYear() - 18); // Mínimo 18 años
+        //const fechaNac = new Date(fechanacimiento);
+        const edadMinima = 28;
+        //edadMinima.setFullYear(edadMinima.getFullYear() - 18); // Mínimo 18 años
 
-        if (fechaNac > edadMinima) {
+        if (edadMinima<18) {
             return res.status(400).json({
                 error: {
                     message: 'Debes tener al menos 18 años para registrarte como conductor'
@@ -104,42 +104,23 @@ async function registerDriver(req, res) {
             .from('driver')
             .insert({
                 id: userId,
-                fotoDriver,
-                fotoLicencia,
+                fotodriver,
+                fotolicencia,
                 numeroLicencia,
-                fechanacimiento: fechaNac.toISOString(),
-                verificado: false, // Por defecto no verificado
-                fecha_registro: new Date().toISOString()
             })
-            .select('id, numeroLicencia, fecha_registro')
+            .select('id, numeroLicencia')
             .single();
 
         if (insertError) {
             throw new Error(`Error al insertar conductor: ${insertError.message}`);
         }
-
-        // 7. Actualizar rol en tabla users (opcional pero recomendado)
-        const { error: updateError } = await supabaseAdmin
-            .from('users')
-            .update({ 
-                rol: 'conductor_pendiente',
-                last_updated: new Date().toISOString()
-            })
-            .eq('id', userId);
-
-        if (updateError) {
-            console.error('Error al actualizar rol:', updateError);
-            // No hacemos return aquí porque el registro en driver ya fue exitoso
-        }
-
-        // 8. Respuesta exitosa
+        //. Respuesta exitosa
         return res.status(201).json({
             success: true,
             message: 'Registro de conductor completado. Pendiente de verificación.',
             driver: {
                 id: driverData.id,
                 numeroLicencia: driverData.numeroLicencia,
-                fechaRegistro: driverData.fecha_registro
             },
             user: {
                 id: userId,
@@ -239,8 +220,6 @@ async function register(req, res) {
 
         // 8. Insertar en la tabla users
         const userData = {
-            id: data.user.id,
-            email: data.user.email,
             nombre: metadata.nombre,
             username: metadata.usuario,
             lastname: metadata.lastname,
@@ -250,14 +229,24 @@ async function register(req, res) {
             //created_at: new Date().toISOString()
         };
 
-        const { error: dbError } = await supabaseAdmin
+        console.log("ID DEL USUARIO:", data.user.id);   
+        const { error: dbError } = await supabase
             .from('users')
-            .insert(userData);
+            .update({
+            nombre: metadata.nombre,
+            username: metadata.usuario,
+            lastname: metadata.lastname,
+            nummatricula: metadata.nummatricula,
+            fechanacimiento: metadata.fechanacimiento || null,
+            fotomatricula: metadata.fotomatricula || null, 
+            })
+            .eq('id', data.user.id);
+        console.log("ID DEL USUARIO:", data.user.id);   
 
         if (dbError) {
             console.error('Error al insertar en users:', dbError);
             
-            // Opcional: Revertir el registro en auth si falla la inserción
+            // Opcional: Revertir el registro en auth si falla la inserción     
             await supabase.auth.admin.deleteUser(data.user.id);
             
             return res.status(500).json({ 
@@ -415,7 +404,7 @@ async function registerDriverCompleteForm(req, res) {
         // Campos requeridos para usuario
         const requiredUserFields = ['nombre', 'usuario', 'lastname', 'nummatricula','fechanacimiento', 'fotomatricula'];
         // Campos requeridos para conductor
-        const requiredDriverFields = ['fotoDriver', 'fotoLicencia', 'numeroLicencia', ];
+        const requiredDriverFields = ['fotodriver', 'fotolicencia', 'numeroLicencia' ];
         
         const missingUserFields = requiredUserFields.filter(field => !metadata[field]);
         const missingDriverFields = requiredDriverFields.filter(field => !metadata[field]);
@@ -481,7 +470,6 @@ async function registerDriverCompleteForm(req, res) {
 
         // 9. Insertar en la tabla users (pública)
         const userData = {
-            id: userId,
             email: authData.user.email,
             nombre: metadata.nombre,
             username: metadata.usuario,
@@ -491,9 +479,9 @@ async function registerDriverCompleteForm(req, res) {
             fotomatricula: metadata.fotomatricula || null,
         };
 
-        const { error: userInsertError } = await supabaseAdmin
+        const { error: userInsertError } = await supabase
             .from('users')
-            .insert(userData);
+            .update(userData).eq('id', userId);
 
         if (userInsertError) {
             console.error('Error al insertar en users:', userInsertError);
