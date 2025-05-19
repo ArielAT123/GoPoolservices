@@ -32,6 +32,23 @@ async function agregarVehiculo(req, res) {
         });
     }
 }
+async function obtenerVehiculos(req, res) {
+    try {
+        const {id_driver} = req.params;
+        const {data, error} = await vehiculo.obtenerVehiculos(supabase, id_driver);
+        if(error) {    
+            return res.status(400).json({ error: `Error al obtener vehículos: ${error.message}` });
+        }
+        return res.status(200).json({ data });
+    } catch (error) {
+        return res.status(500).json({ 
+            error: { 
+                message: 'Error interno del servidor',
+                details: error.message 
+            } 
+        });
+    }
+}
 
 export const vehiculoController = {
     agregarVehiculo

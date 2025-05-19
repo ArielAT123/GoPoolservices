@@ -1,6 +1,6 @@
 export class User {
     static table = 'users';
-  
+    static tableDrivers = 'driver';
     static async existsByEmail(supabase, email) {
       try {
         const { data, error } = await supabase
@@ -36,7 +36,22 @@ export class User {
       if (error) throw new Error('Usuario no encontrado');
       return data;
     }
-  
+    
+  static async isDriver(supabase, id) {
+    const { data, error } = await supabase
+      .from(this.tableDrivers)
+      .select('id') // Solo necesitamos saber si existe el registro, no todos los campos
+      .eq('id', id)
+      .maybeSingle(); // Usamos maybeSingle para que devuelva null si no hay registro
+
+    if (error) {
+      console.error('Error al verificar si es conductor:', error);
+      return false; // O podrías lanzar el error si prefieres
+    }
+
+    return data !== null; // Retorna true si existe el registro, false si no
+  }
+
     static async update(supabase, id, updates) {
       const { data, error } = await supabase
         .from(this.table)
